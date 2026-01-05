@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFC Finance Dep Task Management </title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* --- UI Improvements Styles --- */
+        .dashboard-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            padding: 20px;
+            border-radius: 12px;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .stat-card:hover { transform: translateY(-5px); }
+        .total { background: linear-gradient(135deg, #3498db, #2980b9); }
+        .pending { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        .ongoing { background: linear-gradient(135deg, #f39c12, #d35400); }
+        .completed { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+        
+        .stat-card h3 { margin: 0; font-size: 14px; opacity: 0.9; }
+        .stat-card p { margin: 5px 0 0; font-size: 28px; font-weight: bold; }
+
+        /* Progress Bar */
+        .progress-bg { background: #eee; border-radius: 10px; height: 8px; width: 100px; margin-top: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; transition: width 0.5s ease-in-out; }
+
+        /* Deadline Alerts */
+        .date-overdue { color: #e74c3c; font-weight: bold; animation: blinker 1.5s linear infinite; }
+        .date-today { color: #f39c12; font-weight: bold; }
+        @keyframes blinker { 50% { opacity: 0.3; } }
+
+        /* Action Badge */
+        .badge-approval { 
+            background: #f1c40f; color: #000; font-size: 10px; padding: 2px 6px; 
+            border-radius: 4px; font-weight: bold; display: inline-block; margin-bottom: 5px;
+        }
+        .row-highlight { background-color: #fff9eb !important; border-left: 4px solid #f1c40f; }
+
+        /* Field Validation Labels */
+        .field-info { font-size: 11px; color: #666; margin-top: -8px; margin-bottom: 10px; display: block; }
+    </style>
+</head>
+<body>
+    <div id="loginPage" class="container" style="max-width: 400px; margin-top: 100px;">
+        <div class="card">
+            <h2 style="text-align: center;">🔐 Member Login</h2>
+            <input type="email" id="loginEmail" placeholder="Email Address">
+            <input type="password" id="loginPass" placeholder="Password">
+            <button onclick="handleLogin()" class="btn btn-task" style="width: 100%;">Login</button>
+        </div>
+    </div>
+
+    <div id="mainApp" class="container" style="display:none;">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h1>AFC Finance Dep Task Management</h1>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div id="userStatusBox" style="background: white; padding: 8px 15px; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <span id="userInfo" style="font-weight:bold; font-size: 14px; color: #333;"></span>
+                    <select id="myCurrentStatus" onchange="updateMyStatus()" style="margin-left:10px; padding: 4px; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid #ccc;">
+                        <option value="Available">🟢 Available</option>
+                        <option value="Leave">🔴 Leave</option>
+                        <option value="Out">🟡 Out</option>
+                    </select>
+                </div>
+                <button onclick="location.reload()" class="btn-act del-btn">Logout</button>
+            </div>
+        </header>
+
+        <div class="dashboard-summary">
+            <div class="stat-card total"><h3 title="Total filtered tasks">Total Tasks</h3><p id="statTotal">0</p></div>
+            <div class="stat-card pending"><h3>Pending</h3><p id="statPending">0</p></div>
+            <div class="stat-card ongoing"><h3>Ongoing</h3><p id="statOngoing">0</p></div>
+            <div class="stat-card completed"><h3>Completed</h3><p id="statCompleted">0</p></div>
+        </div>
+
+        <div style="text-align: right; margin-bottom: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+            <button onclick="bulkComplete()" class="btn-act status-btn admin-only" style="background: #6c757d;">✅ Bulk Complete</button>
+            <button onclick="exportToExcel()" class="btn-act status-btn" style="padding: 10px 20px; font-weight: bold;">📥 Export to Excel</button>
+        </div>
+
+        <div class="main-grid">
+            <aside id="sidebar">
+                <div class="card admin-only">
+                    <h3>👥 Add Member</h3>
+                    <input type="text" id="memberId" placeholder="Unique ID (e.g. 501)">
+                    <input type="text" id="memberName" placeholder="Full Name (will be simple letters)">
+                    
+                    <input type="email" id="memberEmail" placeholder="Email (Type @ to auto-complete)" onkeyup="autoCompleteEmail(this)">
+                    <small class="field-info">Domain: @alliancefinance.lk</small>
+
+                    <input type="password" id="memberPass" placeholder="Password (Min 6 chars)">
+                    <small class="field-info">Must be at least 6 characters</small>
+
+                    <select id="memberRole">
+                        <option value="User">User (Assignee)</option>
+                        <option value="Manager">Manager (Task Adder)</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                    <button onclick="addMember()" class="btn btn-member">Add Member</button>
+                </div>
+
+                <div class="card task-adder-only">
+                    <h3 id="formTitle">📝 Create Task</h3>
+                    <input type="text" id="taskName" placeholder="Task Name">
+                    <select id="assigneeList"></select>
+                    <input type="date" id="deadline">
+                    <select id="priority">
+                        <option value="Low">Low</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                    <textarea id="description" placeholder="Short Description..." maxlength="100" oninput="updateCharCount()"></textarea>
+                    <small id="charCount" class="field-info">0/100 characters</small>
+
+                    <button onclick="saveTask()" id="mainTaskBtn" class="btn btn-task">Save Task</button>
+                    <button onclick="clearTaskForm()" id="cancelBtn" class="btn-act del-btn" style="display:none; width:100%; margin-top:5px;">Cancel Edit</button>
+                </div>
+            </aside>
+
+            <main>
+                <div class="card filter-bar">
+                    <input type="text" id="searchTask" placeholder="Search tasks..." onkeyup="applyFilters()">
+                    <select id="filterAssignee" onchange="applyFilters()" class="admin-only">
+                        <option value="All">All Assignees</option>
+                    </select>
+                    <select id="filterPriority" onchange="applyFilters()">
+                        <option value="All">All Priority</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                    <select id="filterStatus" onchange="applyFilters()">
+                        <option value="All">All Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Ongoing">Ongoing</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                    <div class="date-group">
+                        <input type="date" id="filterDateStart" onchange="applyFilters()" title="Start Date">
+                        <input type="date" id="filterDateEnd" onchange="applyFilters()" title="End Date">
+                    </div>
+                </div>
+
+                <div class="card" style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 30px;"><input type="checkbox" onclick="toggleSelectAll(this)"></th>
+                                <th>ID</th>
+                                <th>Task Details</th>
+                                <th>Assignee</th>
+                                <th>Deadline</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="taskBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="pagination-container">
+                     <button onclick="prevPage()" id="btnPrev" class="btn-act edit-btn">Previous</button>
+                     <span id="pageInfo">Page 1 of 1</span>
+                     <button onclick="nextPage()" id="btnNext" class="btn-act edit-btn">Next</button>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        function toggleSelectAll(source) {
+            const checkboxes = document.getElementsByClassName('task-checkbox');
+            for(let i=0; i<checkboxes.length; i++) {
+                checkboxes[i].checked = source.checked;
+            }
+        }
+    </script>
+    <script src="script.js"></script>
+</body>
+</html>
